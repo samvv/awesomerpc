@@ -25,6 +25,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "reflect-types": "^2.4.1"
+    "reflect-types": "^3.0.0"
   }
 }
