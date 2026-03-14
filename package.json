@@ -23,5 +23,8 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "bun test"
+  },
+  "dependencies": {
+    "reflect-types": "^2.4.1"
   }
 }
