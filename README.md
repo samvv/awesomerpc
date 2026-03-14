@@ -30,7 +30,7 @@ Next, you need to implement this contract, like so:
 ```ts
 import { implement } from "awesomerpc";
 
-const petStoreClientImpl = implement(petStoreClient)
+const petStoreClientImpl = implement(petStoreClientContract)
     .method('refresh', (_ctx) => {
         window.location.reload();
     })
