@@ -1,3 +1,4 @@
+import { write } from "bun";
 import { Subject } from "rxjs";
 
 type WriteFn = (data: string) => Promise<void> | void;
@@ -104,6 +105,10 @@ export class WebSocketTransport implements Transport {
     this.timeout = timeout;
   }
 
+  private onError = () => {
+    // TODO
+  }
+
   public open(): Promise<void> {
     return new Promise((accept, reject) => {
       this.ws = new WebSocket(this.url);
@@ -112,18 +117,23 @@ export class WebSocketTransport implements Transport {
         this.ws!.close();
         reject(new TimeoutReachedWebSocketError());
       }, this.timeout);
-      this.ws.addEventListener('error', () =>{
+      const onError = () => {
         clearTimeout(interval);
         reject(didOpen ? new GenericWebSocketError() : new GenericOpenWebSocketError());
-      });
-      this.ws.addEventListener('open', () => {
+      }
+      const onOpen = () => {
+        this.ws!.removeEventListener('open', onOpen);
+        this.ws!.removeEventListener('error', onError);
         didOpen = true;
         clearTimeout(interval);
         this.ws!.addEventListener('message', event => {
           this.input.next(event.data.toString());
         });
+        this.ws!.addEventListener('error', this.onError);
         accept();
-      });
+      }
+      this.ws.addEventListener('error', onError);
+      this.ws.addEventListener('open', onOpen);
     });
   }
 
@@ -136,6 +146,7 @@ export class WebSocketTransport implements Transport {
       }
       const onClose = () => {
         ws.removeEventListener('close', onClose);
+        ws.removeEventListener('error', this.onError);
         accept();
       }
       ws.addEventListener('close', onClose);
@@ -153,8 +164,7 @@ export class StableTransport implements Transport {
 
   readonly input = new Subject<string>();
 
-  private instance?: Transport;
-  private openPromise?: Promise<void>;
+  private active?: { transport: Transport; opened: Promise<void>; }
 
   private buffer: string[] = [];
 
@@ -163,25 +173,27 @@ export class StableTransport implements Transport {
   }
 
   public async write(data: string): Promise<void> {
-    if (this.instance === undefined) {
+    if (this.active === undefined) {
       this.buffer.push(data);
       return;
     }
-    await this.openPromise;
-    return this.instance!.write(data);
+    await this.active.opened;
+    return this.active.transport.write(data);
   }
 
   public async open(): Promise<void> {
-    this.instance = this.factory();
-    this.openPromise = this.instance.open();
-    // TODO retry open() on failure
+    const transport = this.factory();
+    this.active = {
+      transport,
+      opened: transport.open(),
+    }
+    // TODO reconnect on failure
   }
 
   public async close(): Promise<void> {
-    if (this.instance !== undefined) {
-      await this.instance.close();
-      this.instance = undefined;
-      this.openPromise = undefined;
+    if (this.active !== undefined) {
+      await this.active.transport.close();
+      delete this.active;
     }
   }
 
