@@ -1,0 +1,27 @@
+{
+  "name": "typedrpc",
+  "version": "1.0.0",
+  "description": "A fully typed RPC framework for TypeScript",
+  "keywords": [
+    "rpc",
+    "typescript",
+    "types",
+    "networking",
+    "websocket"
+  ],
+  "homepage": "https://github.com/samvv/typedrpc#readme",
+  "bugs": {
+    "url": "https://github.com/samvv/typedrpc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samvv/typedrpc.git"
+  },
+  "license": "MIT",
+  "author": "Sam Vervaeck",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "bun test"
+  }
+}
