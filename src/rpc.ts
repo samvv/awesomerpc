@@ -31,7 +31,7 @@ import {
 } from "./protocol.js";
 import type { Transport } from "./transport.js";
 import { EventNotFoundError, MethodNotFoundError, ProtocolError, RemoteError, RPCError, FailedValidationError } from "./error.js";
-import type { Impl, Spec, InferTuple } from "./types.js";
+import type { Impl, Contract, InferTuple } from "./types.js";
 
 export class Resource<T> {
 

@@ -14,16 +14,16 @@ export type InferTuple<Ps extends ReadonlyArray<Type>> = { [I in keyof Ps]: Infe
 
 type MethodFn<S, Ps extends ReadonlyArray<Type>, R extends Type> = (ctx: S, ...args: InferTuple<Ps>) => Infer<R>;
 
-export type MethodSpec<Ps extends ReadonlyArray<Type> = readonly Type[], R extends Type = Type> = CallableType<Ps, R>;
+export type MethodContract<Ps extends ReadonlyArray<Type> = readonly Type[], R extends Type = Type> = CallableType<Ps, R>;
 
-type MethodSpecIn = MethodSpec;
+type MethodContractIn = MethodContract;
 
-export type EventSpec<T extends Type = Type> = { ty: T; };
+export type EventContract<T extends Type = Type> = { ty: T; };
 
-type EventSpecIn = Type;
+type EventContractIn = Type;
 
-export type LitSpecIn<
-  M extends Record<string, MethodSpec> = Record<string, MethodSpec>,
+export type LitContractIn<
+  M extends Record<string, MethodContract> = Record<string, MethodContract>,
   E extends Record<string, Type> = Record<string, Type>
 > = {
   methods?: M,
@@ -34,9 +34,9 @@ export type LitSpecIn<
 //   return { params, returns };
 // }
 
-export interface Spec {
-  methods: Record<string, MethodSpec>;
-  events: Record<string, EventSpec>;
+export interface Contract {
+  methods: Record<string, MethodContract>;
+  events: Record<string, EventContract>;
   hasMethod(name: string): boolean;
   hasEvent(name: string): boolean;
   validateArgs(name: string, args: any[]): any[];
@@ -44,10 +44,10 @@ export interface Spec {
   validateEventValue(name: string, value: any): any;
 }
 
-export class LitSpec<
-  M extends Record<string, MethodSpec> = Record<string, MethodSpec>,
-  E extends Record<string, EventSpec> = Record<string, EventSpec>
-> implements Spec {
+export class LitContract<
+  M extends Record<string, MethodContract> = Record<string, MethodContract>,
+  E extends Record<string, EventContract> = Record<string, EventContract>
+> implements Contract {
 
   public constructor(
     public methods: M,
@@ -96,10 +96,10 @@ export class LitSpec<
 
 }
 
-class AnySpec implements Spec {
+class AnyContract implements Contract {
 
-  public methods!: Record<string, MethodSpec>;
-  public events!: Record<string, EventSpec>;
+  public methods!: Record<string, MethodContract>;
+  public events!: Record<string, EventContract>;
 
   public hasMethod(_name: string): boolean {
     return true;
@@ -123,25 +123,25 @@ class AnySpec implements Spec {
 
 }
 
-export function anyContract(): AnySpec {
-  return new AnySpec();
+export function anyContract(): AnyContract {
+  return new AnyContract();
 }
 
-export function emptyContract(): LitSpec<{}, {}> {
-  return new LitSpec({}, {});
+export function emptyContract(): LitContract<{}, {}> {
+  return new LitContract({}, {});
 }
 
-export function contract<M extends Record<string, MethodSpecIn>, E extends Record<string, EventSpecIn>>(spec: LitSpecIn<M, E>) {
+export function contract<M extends Record<string, MethodContractIn>, E extends Record<string, EventContractIn>>(spec: LitContractIn<M, E>) {
   const events = {} as any;
   for (const [k, v] of Object.entries(spec.events ?? {})) {
     events[k] = { ty: v };
   }
-  return new LitSpec(spec.methods ?? {} as M, events as { [K in keyof E]: EventSpec<E[K]> });
+  return new LitContract(spec.methods ?? {} as M, events as { [K in keyof E]: EventContract<E[K]> });
 }
 
 // type FnObj<S, M extends Record<string, MethodSpec>> = { [K in keyof M]: MethodFn<S, M[K]['params'], M[K]['returns']> };
 
-class ImplBuilder<L extends Spec, R extends Spec, S = {}> {
+class ImplBuilder<L extends Contract, R extends Contract, S = {}> {
 
   public constructor(
     public local: L,
@@ -168,7 +168,7 @@ class ImplBuilder<L extends Spec, R extends Spec, S = {}> {
 
 }
 
-class ImplBuilder2<L extends Spec, R extends Spec, Names extends keyof L['methods'], S> {
+class ImplBuilder2<L extends Contract, R extends Contract, Names extends keyof L['methods'], S> {
 
   public constructor(
     public local: L,
@@ -194,12 +194,12 @@ class ImplBuilder2<L extends Spec, R extends Spec, Names extends keyof L['method
 
 }
 
-export class Impl<M extends Record<string, MethodSpec> = Record<string, MethodSpec>, E extends Record<string, EventSpec> = Record<string, EventSpec>, R extends Spec = AnySpec, S = any> {
+export class Impl<M extends Record<string, MethodContract> = Record<string, MethodContract>, E extends Record<string, EventContract> = Record<string, EventContract>, R extends Contract = AnyContract, S = any> {
 
   public state!: S;
 
   public constructor(
-    public local: LitSpec<M, E>,
+    public local: LitContract<M, E>,
     public remote: R,
     public procs: { [K in keyof M]: MethodFn<S, M[K]['paramTypes'], M[K]['returnType']> },
   ) {
@@ -213,9 +213,9 @@ export class Impl<M extends Record<string, MethodSpec> = Record<string, MethodSp
 }
 
 export function implement<
-  M extends Record<string, MethodSpec>,
-  E extends Record<string, EventSpec>,
-  R extends Spec
->(local: LitSpec<M, E>, remote: R) {
+  M extends Record<string, MethodContract>,
+  E extends Record<string, EventContract>,
+  R extends Contract
+>(local: LitContract<M, E>, remote: R) {
   return new ImplBuilder(local, remote);
 }

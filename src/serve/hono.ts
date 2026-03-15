@@ -9,12 +9,10 @@ import { anyContract } from "../types.js";
 
 const KEY_WEBSOCKET_DATA = 'awesomerpc'
 
-export default function honoServe<L extends Impl>(local: L, createState: (ctx: Context, ws: WSContext) => L['state']) {
-
-  const remote = anyContract();
+export default function honoServe<I extends Impl>(impl: I, createState: (ctx: Context, ws: WSContext) => I['state']) {
 
   interface SessionData {
-    rpc: RPC<L, typeof remote>;
+    rpc: RPC<I>;
     transport: RawTransport;
   }
 
@@ -32,8 +30,7 @@ export default function honoServe<L extends Impl>(local: L, createState: (ctx: C
         );
         const rpc = new RPC(
           transport,
-          local,
-          remote,
+          impl,
           state,
         );
         sws.data[KEY_WEBSOCKET_DATA] = { rpc, transport };

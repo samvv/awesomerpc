@@ -1,13 +1,13 @@
 import type { Subject } from "rxjs";
 
 import type { RPC } from "./rpc.js";
-import type { Impl, MethodSpec, EventSpec } from "./types.js";
+import type { Impl, MethodContract, EventContract } from "./types.js";
 import type { CallableType } from "reflect-types";
 
 type Promisify<T extends CallableType>
   = (...args: T['paramTypes']) => Promise<Awaited<T['returnType']>>;
 
-type Obj<M extends Record<string, MethodSpec>, E extends Record<string, EventSpec>>
+type Obj<M extends Record<string, MethodContract>, E extends Record<string, EventContract>>
   = { [K in keyof M]: Promisify<M[K]> }
   & { [K in keyof E]: Subject<E[K]['ty']> };
 
