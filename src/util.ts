@@ -30,3 +30,10 @@ export class Deferred<T> {
   }
 
 }
+
+export function isPrimitive(value: any): boolean {
+  return value == null
+      || typeof(value) === 'boolean'
+      || typeof(value) === 'number'
+      || typeof(value) === 'string'
+}

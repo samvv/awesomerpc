@@ -1,7 +1,7 @@
 import { BehaviorSubject, Subject, Subscription } from "rxjs";
 import { type Infer } from "reflect-types";
 
-import { isPlainObject, Deferred, type JSONObject, type JSONValue } from "./util.js";
+import { isPlainObject, Deferred, type JSONObject, type JSONValue, isPrimitive } from "./util.js";
 import {
   decodeEvent,
   decodeObservableComplete,
@@ -32,7 +32,6 @@ import {
 import type { Transport } from "./transport.js";
 import { EventNotFoundError, MethodNotFoundError, ProtocolError, RemoteError, RPCError, FailedValidationError } from "./error.js";
 import type { Impl, Spec, InferTuple } from "./types.js";
-import { which } from "bun";
 
 export class Resource<T> {
 
@@ -56,13 +55,6 @@ export type MethodFn = (...args: any[]) => any;
 export type AnyEvents = Record<string, Subject<any>>
 
 export type AnyMethods = Record<string, MethodFn>;
-
-function isPrimitive(value: any): boolean {
-  return value == null
-      || typeof(value) === 'boolean'
-      || typeof(value) === 'number'
-      || typeof(value) === 'string'
-}
 
 export type RPCValue = JSONValue | AsyncIterable<any, any, any> | Resource<Subject<any>> | Resource<BehaviorSubject<any>>;
 
