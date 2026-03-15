@@ -58,7 +58,7 @@ export type AnyMethods = Record<string, MethodFn>;
 
 export type RPCValue = JSONValue | AsyncIterable<any, any, any> | Resource<Subject<any>> | Resource<BehaviorSubject<any>>;
 
-export class RPC<L extends Impl, R extends Spec> {
+export class RPC<I extends Impl> {
 
   // For sending data
   private nextMessageId = 0;
@@ -68,18 +68,17 @@ export class RPC<L extends Impl, R extends Spec> {
 
   // For receiving data
   private recvSubjects = new Map<number, Subject<any>>();
-  private pending = new Map<number, { name: keyof R['methods'] & string; deferred: Deferred<any> }>();
+  private pending = new Map<number, { name: keyof I['remote']['methods'] & string; deferred: Deferred<any> }>();
   private asyncGenerators = new Map<number, { buffer: any[], deferred: Deferred<void> }>();
-  private events: { [K in keyof L['spec']['events']]: Subject<Infer<L['spec']['events'][K]['ty']>> } = Object.create(null);
+  private events: { [K in keyof I['local']['events']]: Subject<Infer<I['local']['events'][K]['ty']>> } = Object.create(null);
 
   // Internal resources
   private readerSubscription: Subscription;
 
   public constructor(
     private transport: Transport,
-    public local: L,
-    public remote: R,
-    private state: L['state'],
+    public impl: I,
+    private state: I['state'],
   ) {
     // Process incoming messages
     this.readerSubscription = transport.input.subscribe(data => {
@@ -95,28 +94,28 @@ export class RPC<L extends Impl, R extends Spec> {
     });
   }
 
-  public getEvent<K extends keyof L['spec']['events'] & string>(name: K): Subject<Infer<L['spec']['events'][K]['ty']>>;
+  public getEvent<K extends keyof I['local']['events'] & string>(name: K): Subject<Infer<I['local']['events'][K]['ty']>>;
   public getEvent(name: string): undefined;
   public getEvent(name: string): Subject<any> | undefined {
-    if (!this.local.spec.hasEvent(name)) {
+    if (!this.impl.local.hasEvent(name)) {
       return;
     }
     if (this.events[name] === undefined) {
-      return this.events[name as keyof L['spec']['events']] = new Subject<any>();
+      return this.events[name as keyof I['local']['events']] = new Subject<any>();
     }
     return this.events[name];
   }
 
 
-  public async notify<K extends keyof R['events']>(eventName: K, value: Infer<R['events'][K]['ty']>): Promise<void> {
+  public async notify<K extends keyof I['remote']['events']>(eventName: K, value: Infer<I['remote']['events'][K]['ty']>): Promise<void> {
     await this.transport.write(JSON.stringify([ MSGID_EVENT, eventName, this.encode(value) ]));
   }
 
   public hasMethod(name: string) {
-    return this.local.spec.hasMethod(name);
+    return this.impl.local.hasMethod(name);
   }
 
-  public async callMethod<K extends keyof R['methods'] & string>(name: K, args: InferTuple<R['methods'][K]['paramTypes']>): Promise<Infer<R['methods'][K]['returnType']>> {
+  public async callMethod<K extends keyof I['remote']['methods'] & string>(name: K, args: InferTuple<I['remote']['methods'][K]['paramTypes']>): Promise<Infer<I['remote']['methods'][K]['returnType']>> {
     const id = this.nextMessageId++;
     console.log(`send REQUEST ${id}`)
     const deferred = new Deferred<any>();
@@ -306,7 +305,7 @@ export class RPC<L extends Impl, R extends Spec> {
             throw new EventNotFoundError(name);
           }
           const value = this.decode(rawValue);
-          const coerced = this.local.spec.validateEventValue(name, value);
+          const coerced = this.impl.local.validateEventValue(name, value);
           subject.next(coerced);
           break;
         }
@@ -316,11 +315,11 @@ export class RPC<L extends Impl, R extends Spec> {
         console.log(`recv REQUEST ${id} (${name})`);
         try {
           const args = encodedArgs.map(this.decode.bind(this));
-          const method = this.local.getHandler(name);
+          const method = this.impl.getHandler(name);
           if (method === undefined) {
             throw new MethodNotFoundError(name);
           }
-          const validArgs = this.local.spec.validateArgs(name, args);
+          const validArgs = this.impl.local.validateArgs(name, args);
           Promise.resolve(method(this.state, ...validArgs))
             .then(value => this.transport.write(JSON.stringify([ MSGID_RESPOND_OK, id, this.encode(value) ])))
             .catch(error => this.transport.write(JSON.stringify([ MSGID_RESPOND_ERROR, id, error.message ])));
@@ -405,7 +404,7 @@ export class RPC<L extends Impl, R extends Spec> {
         const decoded = this.decode(value);
         let coerced;
         try {
-          coerced = this.remote.validateReturns(name, decoded);
+          coerced = this.impl.remote.validateReturns(name, decoded);
         } catch (error) {
           if (error instanceof FailedValidationError) {
             deferred.reject(error);
@@ -440,6 +439,6 @@ export class RPC<L extends Impl, R extends Spec> {
 
 }
 
-export function connect<L extends Impl, R extends Spec>(local: L, remote: R, transport: Transport, state?: L['state']): RPC<L, R> {
-  return new RPC(transport, local, remote, state);
+export function connect<I extends Impl>(impl: I, transport: Transport, state?: I['state']): RPC<I> {
+  return new RPC(transport, impl, state);
 }

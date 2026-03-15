@@ -25,7 +25,7 @@ const remote = contract({
   }
 });
 
-const leftImpl = implement(local)
+const leftImpl = implement(local, remote)
   .state<{ foo: number }>()
   .methods({
     getState(ctx) {
@@ -41,7 +41,7 @@ const leftImpl = implement(local)
   })
   .finish();
 
-const rightImpl = implement(remote)
+const rightImpl = implement(remote, local)
   .state<{ foo: number }>()
   .methods({
     getState(ctx) {
@@ -60,8 +60,8 @@ const rightImpl = implement(remote)
 test('can call methods on both sides', async () => {
 
   const [leftTransport, rightTransport] = createDuplex();
-  const left = connect(leftImpl, remote, leftTransport, { foo: 42 });
-  const right = connect(rightImpl, local, rightTransport, { foo: 33 });
+  const left = connect(leftImpl, leftTransport, { foo: 42 });
+  const right = connect(rightImpl, rightTransport, { foo: 33 });
 
   expect(await left.callMethod('getLength', ["foobar"])).toStrictEqual(6);
   expect(await left.callMethod('getState', [])).toStrictEqual(33);
@@ -74,8 +74,8 @@ test('can call methods on both sides', async () => {
 
 test('throws an error on invalid param count', async () => {
   const [leftTransport, rightTransport] = createDuplex();
-  const left = connect(leftImpl, remote, leftTransport, { foo: 42 });
-  const right = connect(rightImpl, local, rightTransport, { foo: 33 });
+  const left = connect(leftImpl, leftTransport, { foo: 42 });
+  const right = connect(rightImpl, rightTransport, { foo: 33 });
 
   expect(left.callMethod('getLength',
     // @ts-expect-error Deliberatly added a param
@@ -89,16 +89,16 @@ test('throws an error on invalid param count', async () => {
 
 test('throws an error on invalid return', async () => {
   const [leftTransport, rightTransport] = createDuplex();
-  const left = connect(leftImpl, remote, leftTransport, { foo: 42 });
-  const right = connect(rightImpl, local, rightTransport, { foo: 33 });
+  const left = connect(leftImpl, leftTransport, { foo: 42 });
+  const right = connect(rightImpl, rightTransport, { foo: 33 });
 
   expect(right.callMethod('returnInvalid', [])).rejects.toBeInstanceOf(FailedValidationError);
 });
 
 test('can send events', done => {
   const [leftTransport, rightTransport] = createDuplex();
-  const left = connect(leftImpl, remote, leftTransport, { foo: 42 });
-  const right = connect(rightImpl, local, rightTransport, { foo: 33 });
+  const left = connect(leftImpl, leftTransport, { foo: 42 });
+  const right = connect(rightImpl, rightTransport, { foo: 33 });
 
   left.getEvent('someevent').subscribe(msg => {
     expect(msg).toStrictEqual('foo');

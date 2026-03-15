@@ -141,63 +141,66 @@ export function contract<M extends Record<string, MethodSpecIn>, E extends Recor
 
 // type FnObj<S, M extends Record<string, MethodSpec>> = { [K in keyof M]: MethodFn<S, M[K]['params'], M[K]['returns']> };
 
-class ImplBuilder<C extends Spec, S = {}> {
+class ImplBuilder<L extends Spec, R extends Spec, S = {}> {
 
   public constructor(
-    public spec: C,
+    public local: L,
+    public remote: R,
   ) {
 
   }
 
-  public state<S2>(): ImplBuilder2<C, never, S2> {
-    return new ImplBuilder2(this.spec, {});
+  public state<S2>(): ImplBuilder2<L, R, never, S2> {
+    return new ImplBuilder2(this.local, this.remote, {});
   }
 
-  public methods<N2 extends keyof C['methods']>(procs: { [K in N2]: MethodFn<S, C['methods'][K]['paramTypes'], C['methods'][K]['returnType']> }) {
-    return new ImplBuilder2<C, keyof typeof procs, S>(this.spec, procs);
+  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> }) {
+    return new ImplBuilder2<L, R, keyof typeof procs, S>(this.local, this.remote, procs);
   }
 
-  public method<K extends string>(name: K, proc: MethodFn<S, C['methods'][K]['paramTypes'], C['methods'][K]['returnType']>) {
-    return new ImplBuilder2<C, K, S>(this.spec, makeObj(name, proc));
+  public method<K extends string>(name: K, proc: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']>) {
+    return new ImplBuilder2<L, R, K, S>(this.local, this.remote, makeObj(name, proc));
   }
 
   public finish() {
-    return new Impl(this.spec, {});
+    return new Impl(this.local, this.remote, {});
   }
 
 }
 
-class ImplBuilder2<C extends Spec, Names extends keyof C['methods'], S> {
+class ImplBuilder2<L extends Spec, R extends Spec, Names extends keyof L['methods'], S> {
 
   public constructor(
-    public spec: C,
-    public procs: { [K in Names]: MethodFn<S, C['methods'][K]['paramTypes'], C['methods'][K]['returnType']> },
+    public local: L,
+    public remote: R,
+    public procs: { [K in Names]: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> },
   ) {
 
   }
 
-  public methods<N2 extends keyof C['methods']>(procs: { [K in N2]: MethodFn<S, C['methods'][K]['paramTypes'], C['methods'][K]['returnType']> }) {
+  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> }) {
     const newM = Object.assign(this.procs, procs);
-    return new ImplBuilder2<C, keyof typeof newM, S>(this.spec, newM);
+    return new ImplBuilder2<L, R, keyof typeof newM, S>(this.local, this.remote, newM);
   }
 
-  public method<K extends string>(name: K, proc: MethodFn<S, C['methods'][K]['paramTypes'], C['methods'][K]['returnType']>): ImplBuilder2<C, Names | K, S> {
+  public method<K extends string>(name: K, proc: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']>): ImplBuilder2<L, R, Names | K, S> {
     const newM = assign(this.procs, name, proc);
-    return new ImplBuilder2(this.spec, newM);
+    return new ImplBuilder2(this.local, this.remote, newM);
   }
 
-  public finish(this: ImplBuilder2<C, keyof C['methods'], S>) {
-    return new Impl(this.spec, this.procs);
+  public finish(this: ImplBuilder2<L, R, keyof L['methods'], S>) {
+    return new Impl(this.local, this.remote, this.procs);
   }
 
 }
 
-export class Impl<M extends Record<string, MethodSpec> = Record<string, MethodSpec>, E extends Record<string, EventSpec> = Record<string, EventSpec>, S = any> {
+export class Impl<M extends Record<string, MethodSpec> = Record<string, MethodSpec>, E extends Record<string, EventSpec> = Record<string, EventSpec>, R extends Spec = AnySpec, S = any> {
 
   public state!: S;
 
   public constructor(
-    public spec: LitSpec<M, E>,
+    public local: LitSpec<M, E>,
+    public remote: R,
     public procs: { [K in keyof M]: MethodFn<S, M[K]['paramTypes'], M[K]['returnType']> },
   ) {
 
@@ -211,7 +214,8 @@ export class Impl<M extends Record<string, MethodSpec> = Record<string, MethodSp
 
 export function implement<
   M extends Record<string, MethodSpec>,
-  E extends Record<string, EventSpec>
->(spec: LitSpec<M, E>) {
-  return new ImplBuilder(spec);
+  E extends Record<string, EventSpec>,
+  R extends Spec
+>(local: LitSpec<M, E>, remote: R) {
+  return new ImplBuilder(local, remote);
 }
