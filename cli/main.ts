@@ -1,42 +1,86 @@
 #!/usr/bin/env bun
 
-import { command, number, option, positional, rest, run, string } from "cmd-ts"
+import { command, number, option, optional, positional, rest, run, string, subcommands } from "cmd-ts"
 import { anyContract, emptyContract, implement, connect, WebSocketTransport } from "awesomerpc";
+import { which } from "bun";
 
-const cli = command({
+const cli = subcommands({
   name: 'awesomerpc',
-  args: {
-    url: option({
-      long: 'url',
-      description: 'The URL to connect to',
-      type: string,
-      defaultValue: () => 'http://localhost:3000/ws',
-      defaultValueIsSerializable: true,
+  cmds: {
+    call: command({
+      name: 'call',
+      args: {
+        url: option({
+          long: 'url',
+          description: 'The URL to connect to',
+          type: string,
+          defaultValue: () => 'http://localhost:3000/ws',
+          defaultValueIsSerializable: true,
+        }),
+        methodName: positional({
+          displayName: 'method-name',
+          type: string,
+        }),
+        args: rest(),
+      },
+      handler: async args => {
+        // Extract arguments
+        const url = args.url;
+        const methodName = args.methodName;
+        const methodArgs = args.args.map(parse);
+
+        // Initialize RPC
+        console.info(`> Sending request to ${url} ...`);
+        const ws = new WebSocketTransport(url);
+        await ws.open();
+        const local = emptyContract(); // Remote is not allowed to call any methods
+        const remote = anyContract(); // We are allowed to dynamically call anthing we wish
+        const rpc = connect(implement(local, remote).finish(), ws, {});
+
+        await print(await rpc.callMethod(methodName, methodArgs));
+
+        rpc.close();
+        ws.close();
+      }
     }),
-    methodName: positional({
-      displayName: 'method-name',
-      type: string,
+    notify: command({
+      name: 'notify',
+      args: {
+        url: option({
+          long: 'url',
+          description: 'The URL to connect to',
+          type: string,
+          defaultValue: () => 'http://localhost:3000/ws',
+          defaultValueIsSerializable: true,
+        }),
+        eventName: positional({
+          displayName: 'event-name',
+          type: string,
+        }),
+        arg: positional({
+          type: optional(string),
+        }),
+      },
+      handler: async args => {
+        // Extract arguments
+        const url = args.url;
+        const eventName = args.eventName;
+        const arg = args.arg ? parse(args.arg) : args.arg;
+
+        // Initialize RPC
+
+        const ws = new WebSocketTransport(url);
+        await ws.open();
+        const local = emptyContract(); // Remote is not allowed to call any methods
+        const remote = anyContract(); // We are allowed to dynamically call anthing we wish
+        const rpc = connect(implement(local, remote).finish(), ws, {});
+
+        await rpc.notify(eventName, arg);
+
+        rpc.close();
+        ws.close();
+      },
     }),
-    args: rest(),
-  },
-  handler: async result => {
-    // Extract arguments
-    const url = result.url;
-    const methodName = result.methodName;
-    const args = result.args.map(parse);
-
-    // Initialize RPC
-    console.info(`> Sending request to ${url} ...`);
-    const ws = new WebSocketTransport(url);
-    await ws.open();
-    const local = emptyContract(); // Remote is not allowed to call any methods
-    const remote = anyContract(); // We are allowed to dynamically call anthing we wish
-    const rpc = connect(implement(local, remote).finish(), ws, {});
-
-    await print(await rpc.callMethod(methodName, args));
-
-    rpc.close();
-    ws.close();
   }
 });
 
@@ -85,5 +129,9 @@ function parse(text: string): any {
   if (!Number.isNaN(number)) {
     return number;
   }
-  return text;
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return text;
+  }
 }
