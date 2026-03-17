@@ -1,0 +1,33 @@
+{
+  "name": "@samvv/awesomerpc-cli",
+  "version": "0.0.1",
+  "description": "Send requests through the command-line to any AwesomeRPC instance",
+  "keywords": [
+    "rpc",
+    "cli",
+    "tool",
+    "websocket"
+  ],
+  "bin": {
+    "awesomerpc": "main.ts"
+  },
+  "homepage": "https://github.com/samvv/aweseomerpc#readme",
+  "bugs": {
+    "url": "https://github.com/samvv/aweseomerpc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samvv/aweseomerpc.git"
+  },
+  "license": "MIT",
+  "author": "Sam Vervaeck",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "awesomerpc": "file:..",
+    "cmd-ts": "^0.15.0"
+  }
+}
