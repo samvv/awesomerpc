@@ -1,4 +1,4 @@
-import { types as t } from "reflect-types";
+import t from "reflect-types";
 import { contract } from "awesomerpc";
 
 import { productT } from "./types.js";

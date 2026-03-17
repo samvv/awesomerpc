@@ -1,4 +1,4 @@
-import { type Infer, types as t } from "reflect-types";
+import t, { type Infer } from "reflect-types";
 
 export const productT = t.object({
     id: t.uuid4(),

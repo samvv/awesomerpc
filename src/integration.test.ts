@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { types as t } from "reflect-types";
+import t from "reflect-types";
 
 import { contract, implement } from "./types.js"
 import { createDuplex } from "./transport.js"
