@@ -1,4 +1,4 @@
-import { validate, type Type, type Infer, type CallableType } from "reflect-types";
+import { validate, type Type, type Infer, type CallableType, type UndefinedType } from "reflect-types";
 
 import { FailedValidationError, ParamCountMismatchError } from "./error.js";
 import type { Subject } from "rxjs";
@@ -16,12 +16,21 @@ export type InferTuple<Ps extends ReadonlyArray<Type>> = { [I in keyof Ps]: Infe
 type Promisify<T extends CallableType>
   = (...args: T['paramTypes']) => Promise<Awaited<T['returnType']>>;
 
-export type ClientObj<M extends Record<string, MethodContract>, E extends Record<string, EventContract>>
-  = { [K in keyof M]: Promisify<M[K]>; }
-  & { [K in keyof E]: Subject<E[K]['ty']>; };
+type OptionalEvents<T extends Record<string, EventContract>> = { [K in keyof T as T[K]['ty'] extends UndefinedType ? K : never]: T[K] }
+type RequiredEvents<T extends Record<string, EventContract>> = { [K in keyof T as T[K]['ty'] extends UndefinedType ? never : K]: T[K] }
+
+export type ClientObj<L extends Contract, R extends Contract>
+  = { [K in keyof R['methods']]: Promisify<R['methods'][K]>; }
+  & { [K in keyof L['events']]: Subject<L['events'][K]['ty']>; }
+  & ClientObjStatic<L, R>
+
+interface ClientObjStatic<L extends Contract, R extends Contract> {
+  notify<K extends keyof OptionalEvents<R['events']>>(name: K): void;
+  notify<K extends keyof RequiredEvents<R['events']>>(name: K, arg: Infer<R['events'][K]['ty']>): void;
+}
 
 type Request<L extends Contract, R extends Contract, S, K extends keyof L['methods']> = {
-  client: ClientObj<R['methods'], L['events']>;
+  client: ClientObj<L, R>;
   state: S;
   args: InferTuple<L['methods'][K]['paramTypes']>;
 };
@@ -155,8 +164,6 @@ export function contract<M extends Record<string, MethodContractIn>, E extends R
 
 // type FnObj<S, M extends Record<string, MethodSpec>> = { [K in keyof M]: MethodFn<S, M[K]['params'], M[K]['returns']> };
 
-const empty = () => ({});
-
 class ImplBuilder<L extends Contract, R extends Contract, S extends object = {}> {
 
   public constructor(
@@ -213,19 +220,19 @@ class ImplBuilder2<L extends Contract, R extends Contract, Names extends keyof L
 
   public method<K extends string>(name: K, proc: MethodFn<L, R, S, K>): ImplBuilder2<L, R, Names | K, S> {
     const newM = assign(this.procs, name, proc);
-    return new ImplBuilder2(this.local, this.remote, newM);
+    return new ImplBuilder2<L, R, keyof typeof newM, S>(this.local, this.remote, newM);
   }
 
   public finish(this: ImplBuilder2<L, R, keyof L['methods'], S>) {
-    return new Impl(this.local, this.remote, this.procs);
+    return new Impl<L, R, S>(this.local, this.remote, this.procs);
   }
 
 }
 
 export class Impl<
   L extends Contract,
-  R extends Contract ,
-  S extends object
+  R extends Contract,
+  S extends object = {}
 > {
 
   public state!: S;

@@ -1,9 +1,10 @@
 
 import type { RPC } from "./rpc.js";
-import type { Impl, ClientObj } from "./types.js";
+import type { ClientObj, Contract } from "./types.js";
 
-export function createProxy<I extends Impl>(rpc: RPC<I>) {
-  return new Proxy<ClientObj<I['remote']['methods'], I['local']['events']>>({} as any, {
+export function createProxy<L extends Contract, R extends Contract, S extends object>(rpc: RPC<L, R, S>) {
+  // FIXME This `any` cast is a hack
+  return new Proxy<ClientObj<L, R>>(rpc as any, {
     get(target, p, receiver) {
       if (typeof(p) === 'string') {
         if (rpc.impl.remote.hasMethod(p)) {

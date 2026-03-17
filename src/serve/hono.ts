@@ -4,15 +4,18 @@ import type { Context } from "hono";
 
 import { RPC } from "../rpc.js"
 import { RawTransport } from "../transport.js";
-import type { Impl } from "../types.js";
-import { anyContract } from "../types.js";
+import type { Contract, Impl } from "../types.js";
 
 const KEY_WEBSOCKET_DATA = 'awesomerpc'
 
-export default function honoServe<I extends Impl>(impl: I, createState: (ctx: Context, ws: WSContext) => I['state']) {
+export default function honoServe<
+  L extends Contract,
+  R extends Contract,
+  S extends object
+>(impl: Impl<L, R, S>, createState: (ctx: Context, ws: WSContext) => S) {
 
   interface SessionData {
-    rpc: RPC<I>;
+    rpc: RPC<L, R, S>;
     transport: RawTransport;
   }
 

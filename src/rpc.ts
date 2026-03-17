@@ -31,7 +31,7 @@ import {
 } from "./protocol.js";
 import type { Transport } from "./transport.js";
 import { EventNotFoundError, MethodNotFoundError, ProtocolError, RemoteError, RPCError, FailedValidationError } from "./error.js";
-import type { Impl, InferTuple } from "./types.js";
+import type { Contract, Impl, InferTuple } from "./types.js";
 import { createProxy } from "./proxy.js";
 
 export class Resource<T> {
@@ -59,7 +59,7 @@ export type AnyMethods = Record<string, MethodFn>;
 
 export type RPCValue = JSONValue | AsyncIterable<any, any, any> | Resource<Subject<any>> | Resource<BehaviorSubject<any>>;
 
-export class RPC<I extends Impl> {
+export class RPC<L extends Contract, R extends Contract, S extends object> {
 
   // For sending data
   private nextMessageId = 0;
@@ -69,9 +69,9 @@ export class RPC<I extends Impl> {
 
   // For receiving data
   private recvSubjects = new Map<number, Subject<any>>();
-  private pending = new Map<number, { name: keyof I['remote']['methods'] & string; deferred: Deferred<any> }>();
+  private pending = new Map<number, { name: keyof R['methods'] & string; deferred: Deferred<any> }>();
   private asyncGenerators = new Map<number, { buffer: any[], deferred: Deferred<void> }>();
-  private events: { [K in keyof I['local']['events']]: Subject<Infer<I['local']['events'][K]['ty']>> } = Object.create(null);
+  private events: { [K in keyof L['events']]: Subject<Infer<L['events'][K]['ty']>> } = Object.create(null);
 
   // Internal resources
   private readerSubscription: Subscription;
@@ -80,8 +80,8 @@ export class RPC<I extends Impl> {
 
   public constructor(
     private transport: Transport,
-    public impl: I,
-    private state: I['state'],
+    public impl: Impl<L, R, S>,
+    private state: S,
   ) {
     // Process incoming messages
     this.readerSubscription = transport.input.subscribe(data => {
@@ -97,20 +97,20 @@ export class RPC<I extends Impl> {
     });
   }
 
-  public getEvent<K extends keyof I['local']['events'] & string>(name: K): Subject<Infer<I['local']['events'][K]['ty']>>;
+  public getEvent<K extends keyof L['events'] & string>(name: K): Subject<Infer<L['events'][K]['ty']>>;
   public getEvent(name: string): undefined;
   public getEvent(name: string): Subject<any> | undefined {
     if (!this.impl.local.hasEvent(name)) {
       return;
     }
     if (this.events[name] === undefined) {
-      return this.events[name as keyof I['local']['events']] = new Subject<any>();
+      return this.events[name as keyof L['events']] = new Subject<any>();
     }
     return this.events[name];
   }
 
 
-  public async notify<K extends keyof I['remote']['events']>(eventName: K, value: Infer<I['remote']['events'][K]['ty']>): Promise<void> {
+  public async notify<K extends keyof R['events']>(eventName: K, value: Infer<R['events'][K]['ty']>): Promise<void> {
     await this.transport.write(JSON.stringify([ MSGID_EVENT, eventName, this.encode(value) ]));
   }
 
@@ -118,7 +118,7 @@ export class RPC<I extends Impl> {
     return this.impl.local.hasMethod(name);
   }
 
-  public async callMethod<K extends keyof I['remote']['methods'] & string>(name: K, args: InferTuple<I['remote']['methods'][K]['paramTypes']>): Promise<Infer<I['remote']['methods'][K]['returnType']>> {
+  public async callMethod<K extends keyof R['methods'] & string>(name: K, args: InferTuple<R['methods'][K]['paramTypes']>): Promise<Infer<R['methods'][K]['returnType']>> {
     const id = this.nextMessageId++;
     console.log(`send REQUEST ${id}`)
     const deferred = new Deferred<any>();
@@ -323,7 +323,12 @@ export class RPC<I extends Impl> {
             throw new MethodNotFoundError(name);
           }
           const validArgs = this.impl.local.validateArgs(name, args);
-          Promise.resolve(method({ client: this.client, state: this.state, args: validArgs }))
+          Promise.resolve(method({
+              client: this.client,
+              state: this.state,
+              // We force the compiler to treat `validArgs` as correctly typed
+              args: validArgs as any
+            }))
             .then(value => this.transport.write(JSON.stringify([ MSGID_RESPOND_OK, id, this.encode(value) ])))
             .catch(error => this.transport.write(JSON.stringify([ MSGID_RESPOND_ERROR, id, error.message ])));
         } catch (error) {
@@ -442,6 +447,6 @@ export class RPC<I extends Impl> {
 
 }
 
-export function connect<I extends Impl>(impl: I, transport: Transport, state?: I['state']): RPC<I> {
+export function connect<L extends Contract, R extends Contract, S extends object>(impl: Impl<L, R, S>, transport: Transport, state: S): RPC<L, R, S> {
   return new RPC(transport, impl, state);
 }
