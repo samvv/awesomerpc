@@ -1,6 +1,7 @@
 import { validate, type Type, type Infer, type CallableType } from "reflect-types";
 
 import { FailedValidationError, ParamCountMismatchError } from "./error.js";
+import type { Subject } from "rxjs";
 
 function assign<O extends Record<any, any>, K extends PropertyKey, V>(obj: O, key: K, value: V): O & Record<K, V> {
   return Object.assign(obj, makeObj(key, value));
@@ -12,23 +13,28 @@ function makeObj<K extends PropertyKey, V>(key: K, value: V): Record<K, V> {
 
 export type InferTuple<Ps extends ReadonlyArray<Type>> = { [I in keyof Ps]: Infer<Ps[I]> }
 
-type MethodFn<S, Ps extends ReadonlyArray<Type>, R extends Type> = (ctx: S, ...args: InferTuple<Ps>) => Infer<R>;
+type Promisify<T extends CallableType>
+  = (...args: T['paramTypes']) => Promise<Awaited<T['returnType']>>;
 
-export type MethodContract<Ps extends ReadonlyArray<Type> = readonly Type[], R extends Type = Type> = CallableType<Ps, R>;
+export type ClientObj<M extends Record<string, MethodContract>, E extends Record<string, EventContract>>
+  = { [K in keyof M]: Promisify<M[K]>; }
+  & { [K in keyof E]: Subject<E[K]['ty']>; };
+
+type Request<L extends Contract, R extends Contract, S, K extends keyof L['methods']> = {
+  client: ClientObj<R['methods'], L['events']>;
+  state: S;
+  args: InferTuple<L['methods'][K]['paramTypes']>;
+};
+
+type MethodFn<L extends Contract, R extends Contract, S, K extends keyof L['methods']> = (req: Request<L, R, S, K>) => Infer<L['methods'][K]['returnType']>;
+
+export type MethodContract<Ps extends ReadonlyArray<Type> = ReadonlyArray<Type>, R extends Type = Type> = CallableType<Ps, R>;
 
 type MethodContractIn = MethodContract;
 
 export type EventContract<T extends Type = Type> = { ty: T; };
 
 type EventContractIn = Type;
-
-export type LitContractIn<
-  M extends Record<string, MethodContract> = Record<string, MethodContract>,
-  E extends Record<string, Type> = Record<string, Type>
-> = {
-  methods?: M,
-  events?: E,
-};
 
 // export function method<Ps extends ReadonlyArray<Type>, R extends Type>(params: Ps, returns: R) {
 //   return { params, returns };
@@ -43,6 +49,14 @@ export interface Contract {
   validateReturns(name: string, value: any): any;
   validateEventValue(name: string, value: any): any;
 }
+
+export type LitContractIn<
+  M extends Record<string, MethodContract> = Record<string, MethodContract>,
+  E extends Record<string, Type> = Record<string, Type>
+> = {
+  methods?: M,
+  events?: E,
+};
 
 export class LitContract<
   M extends Record<string, MethodContract> = Record<string, MethodContract>,
@@ -143,7 +157,7 @@ export function contract<M extends Record<string, MethodContractIn>, E extends R
 
 const empty = () => ({});
 
-class ImplBuilder<L extends Contract, R extends Contract> {
+class ImplBuilder<L extends Contract, R extends Contract, S extends object = {}> {
 
   public constructor(
     public local: L,
@@ -152,84 +166,87 @@ class ImplBuilder<L extends Contract, R extends Contract> {
 
   }
 
-  public state<S2>(factory: () => S2): ImplBuilder2<L, R, never, S2> {
-    return new ImplBuilder2(factory, this.local, this.remote, {});
+  public state<S2 extends object>(): ImplBuilder2<L, R, never, S2> {
+    return new ImplBuilder2(this.local, this.remote, {});
   }
 
-  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<{}, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> }) {
+  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<L, R, {}, K> }) {
     return new ImplBuilder2<L, R, keyof typeof procs, {}>(
-      empty,
       this.local,
       this.remote,
       procs
     );
   }
 
-  public method<K extends string>(name: K, proc: MethodFn<{}, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']>) {
+  public method<K extends string>(name: K, proc: MethodFn<L, R, {}, K>) {
     return new ImplBuilder2<L, R, K, {}>(
-      empty,
       this.local,
       this.remote,
       makeObj(name, proc)
     );
   }
 
-  public finish() {
-    return new Impl(empty, this.local, this.remote, {});
+  public finish(this: ImplBuilder<LitContract<{}, {}>, R>) {
+    return new Impl(
+      this.local,
+      this.remote,
+      {},
+    );
   }
 
 }
 
-class ImplBuilder2<L extends Contract, R extends Contract, Names extends keyof L['methods'], S> {
+class ImplBuilder2<L extends Contract, R extends Contract, Names extends keyof L['methods'], S extends object> {
 
   public constructor(
-    public factory: () => S,
     public local: L,
     public remote: R,
-    public procs: { [K in Names]: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> },
+    public procs: { [K in Names]: MethodFn<L, R, S, K> },
   ) {
 
   }
 
-  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']> }) {
+  public methods<N2 extends keyof L['methods']>(procs: { [K in N2]: MethodFn<L, R, S, K> }) {
     const newM = Object.assign(this.procs, procs);
-    return new ImplBuilder2<L, R, keyof typeof newM, S>(this.factory, this.local, this.remote, newM);
+    return new ImplBuilder2<L, R, keyof typeof newM, S>(this.local, this.remote, newM);
   }
 
-  public method<K extends string>(name: K, proc: MethodFn<S, L['methods'][K]['paramTypes'], L['methods'][K]['returnType']>): ImplBuilder2<L, R, Names | K, S> {
+  public method<K extends string>(name: K, proc: MethodFn<L, R, S, K>): ImplBuilder2<L, R, Names | K, S> {
     const newM = assign(this.procs, name, proc);
-    return new ImplBuilder2(this.factory, this.local, this.remote, newM);
+    return new ImplBuilder2(this.local, this.remote, newM);
   }
 
   public finish(this: ImplBuilder2<L, R, keyof L['methods'], S>) {
-    return new Impl(this.factory, this.local, this.remote, this.procs);
+    return new Impl(this.local, this.remote, this.procs);
   }
 
 }
 
-export class Impl<M extends Record<string, MethodContract> = Record<string, MethodContract>, E extends Record<string, EventContract> = Record<string, EventContract>, R extends Contract = AnyContract, S = any> {
+export class Impl<
+  L extends Contract,
+  R extends Contract ,
+  S extends object
+> {
 
   public state!: S;
 
   public constructor(
-    public factory: () => S,
-    public local: LitContract<M, E>,
+    public local: L,
     public remote: R,
-    public procs: { [K in keyof M]: MethodFn<S, M[K]['paramTypes'], M[K]['returnType']> },
+    public procs: { [K in keyof L['methods']]: MethodFn<L, R, S, K> },
   ) {
 
   }
 
-  public getHandler<K extends keyof M>(name: K): MethodFn<S, M[K]['paramTypes'], M[K]['returnType']> {
+  public getHandler<K extends keyof L['methods']>(name: K): MethodFn<L, R, S, K> {
     return this.procs[name];
   }
 
 }
 
 export function implement<
-  M extends Record<string, MethodContract>,
-  E extends Record<string, EventContract>,
+  L extends Contract,
   R extends Contract
->(local: LitContract<M, E>, remote: R) {
+>(local: L, remote: R) {
   return new ImplBuilder(local, remote);
 }

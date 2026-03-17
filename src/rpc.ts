@@ -31,7 +31,8 @@ import {
 } from "./protocol.js";
 import type { Transport } from "./transport.js";
 import { EventNotFoundError, MethodNotFoundError, ProtocolError, RemoteError, RPCError, FailedValidationError } from "./error.js";
-import type { Impl, Contract, InferTuple } from "./types.js";
+import type { Impl, InferTuple } from "./types.js";
+import { createProxy } from "./proxy.js";
 
 export class Resource<T> {
 
@@ -74,6 +75,8 @@ export class RPC<I extends Impl> {
 
   // Internal resources
   private readerSubscription: Subscription;
+
+  private client = createProxy(this);
 
   public constructor(
     private transport: Transport,
@@ -320,7 +323,7 @@ export class RPC<I extends Impl> {
             throw new MethodNotFoundError(name);
           }
           const validArgs = this.impl.local.validateArgs(name, args);
-          Promise.resolve(method(this.state, ...validArgs))
+          Promise.resolve(method({ client: this.client, state: this.state, args: validArgs }))
             .then(value => this.transport.write(JSON.stringify([ MSGID_RESPOND_OK, id, this.encode(value) ])))
             .catch(error => this.transport.write(JSON.stringify([ MSGID_RESPOND_ERROR, id, error.message ])));
         } catch (error) {

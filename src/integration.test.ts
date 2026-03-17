@@ -6,7 +6,7 @@ import { createDuplex } from "./transport.js"
 import { connect } from "./rpc.js"
 import { FailedValidationError } from "./error.js";
 
-const local = contract({
+const leftContract = contract({
   methods: {
     getState: t.callable([] as const, t.number()),
     setState: t.callable([ t.number() ] as const, t.undefined()),
@@ -17,7 +17,7 @@ const local = contract({
   }
 });
 
-const remote = contract({
+const rightContract = contract({
   methods: {
     getState: t.callable([] as const, t.number()),
     setState: t.callable([ t.number() ] as const, t.undefined()),
@@ -25,15 +25,18 @@ const remote = contract({
   }
 });
 
-const leftImpl = implement(local, remote)
-  .state<{ foo: number }>()
+const leftImpl = implement(leftContract, rightContract)
+  .state<{ foo: number; }>()
+  // .methods(stateHandlers())
   .methods({
-    getState(ctx) {
-      return ctx.foo;
+    getState({ state: { foo } }) {
+      return foo;
     },
-    setState(ctx, state) {
-      ctx.foo = state;
+    setState({ state, args: [ newFoo ] }) {
+      state.foo = newFoo;
     },
+  })
+  .methods({
     // @ts-expect-error Wrong function return type on purpose
     returnInvalid() {
       return "a string";
@@ -41,16 +44,16 @@ const leftImpl = implement(local, remote)
   })
   .finish();
 
-const rightImpl = implement(remote, local)
-  .state<{ foo: number }>()
+const rightImpl = implement(rightContract, leftContract)
+  .state<{ foo: number; }>()
   .methods({
-    getState(ctx) {
-      return ctx.foo;
+    getState({ state }) {
+      return state.foo;
     },
-    setState(ctx, state) {
-      ctx.foo = state;
+    setState({ state,  args: [ newState ]}) {
+      state.foo = newState;
     },
-    getLength(_ctx, s) {
+    getLength({ args: [ s ] }) {
       return s.length;
     }
   })
