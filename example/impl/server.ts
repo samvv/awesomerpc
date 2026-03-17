@@ -29,6 +29,7 @@ export const serverImpl = implement(serverContract, clientContract)
   .method('login', ({ state, args: [ username, password ] }) => {
     if (username === 'foobar' && password === '12345') {
       state.user = username;
+      return true;
     }
     return false;
   })
