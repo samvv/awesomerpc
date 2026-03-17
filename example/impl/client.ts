@@ -1,5 +1,5 @@
 import { implement } from "awesomerpc";
-import { clientContract, serverContract } from "./contracts.js";
+import { clientContract, serverContract } from "../contracts.js";
 
 export const clientImpl = implement(clientContract, serverContract)
     .method('refresh', () => {

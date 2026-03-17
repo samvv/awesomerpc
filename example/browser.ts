@@ -1,10 +1,9 @@
 import { WebSocketTransport, RPC } from "awesomerpc";
-import { clientImpl } from "./client.js";
-import { serverContract } from "./contracts.js";
+import { clientImpl } from "./impl/client.js";
 
 const transport = new WebSocketTransport(`http://localhost:8080/ws`);
 transport.open();
 
-const rpc = new RPC(transport, clientImpl, serverContract, {});
+const rpc = new RPC(transport, clientImpl, {});
 
-console.log(`Available products: ${await rpc.callMethod('getProducts', [])}`);
+console.log(`Available products in basket: ${await rpc.callMethod('getBasket', [])}`);
