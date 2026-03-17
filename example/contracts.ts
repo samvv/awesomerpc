@@ -3,20 +3,23 @@ import { contract } from "awesomerpc";
 
 import { productT } from "./types.js";
 
-export const petStoreServer = contract({
+export const serverContract = contract({
     methods: {
-        getProducts: t.callable([] as const, t.array(productT)),
-        authenticate: t.callable(
+        getBasket: t.callable([] as const, t.object({ items: t.array(productT) })),
+        clearBasket: t.callable([] as const, t.void_()),
+        addToBasket: t.callable([ t.uuid4() ] as const, t.void_()),
+        login: t.callable(
             [
                 t.string(), // username
                 t.string(), // password
             ] as const,
             t.boolean(), // success or not
         ),
+        logout: t.callable([] as const, t.void_()),
     },
 });
 
-export const petStoreClient = contract({
+export const clientContract = contract({
     // These methods the server can call on the client at any time
     methods: {
         refresh: t.callable([] as const, t.void_()),
