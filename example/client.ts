@@ -1,7 +1,7 @@
 import { implement } from "awesomerpc";
-import { petStoreClient } from "./contracts.js";
+import { petStoreClient, petStoreServer } from "./contracts.js";
 
-export const petStoreClientImpl = implement(petStoreClient)
+export const petStoreClientImpl = implement(petStoreClient, petStoreServer)
     .method('refresh', (_ctx) => {
         window.location.reload();
     })
