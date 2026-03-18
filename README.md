@@ -66,6 +66,14 @@ For more information, read the full example in the `example/` directory.
 
 Create a new transport that uses WebSocket to send and receive messages.
 
+### `Transport.open()`
+
+Connect to whatever was specified as the destination address during the
+construction of the transport.
+
+This method returns a promise object that may be awaited in order to ensure the
+connection is ready for use.
+
 ### Top-level Functions
 
 #### `connect(impl, state, logger?)`
