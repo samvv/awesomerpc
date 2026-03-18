@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { command, option, optional, positional, rest, run, string, subcommands } from "cmd-ts"
-import { anyContract, emptyContract, implement, connect, WebSocketTransport } from "awesomerpc";
+import { anyContract, emptyContract, implement, connect, WebSocketTransport, TransportError } from "awesomerpc";
 import pino from "pino";
 
 const logger = pino({
@@ -18,7 +18,7 @@ const cli = subcommands({
           long: 'url',
           description: 'The URL to connect to',
           type: string,
-          defaultValue: () => 'http://localhost:3000/ws',
+          defaultValue: () => 'ws://localhost:3000/ws',
           defaultValueIsSerializable: true,
         }),
         methodName: positional({
@@ -27,7 +27,7 @@ const cli = subcommands({
         }),
         args: rest(),
       },
-      handler: async args => {
+      handler: handled(async args => {
         // Extract arguments
         const url = args.url;
         const methodName = args.methodName;
@@ -35,17 +35,18 @@ const cli = subcommands({
 
         // Initialize RPC
         console.info(`> Sending request to ${url} ...`);
-        const ws = new WebSocketTransport(url);
-        await ws.open();
+        const transport = await loadTransport(url);
+        await transport.open();
         const local = emptyContract(); // Remote is not allowed to call any methods
         const remote = anyContract(); // We are allowed to dynamically call anthing we wish
-        const rpc = connect(implement(local, remote).finish(), ws, {}, logger);
+        const rpc = connect(implement(local, remote).finish(), transport, {}, logger);
 
-        await print(await rpc.callMethod(methodName, methodArgs));
+        const result = await rpc.callMethod(methodName, methodArgs)
+        await print(result);
 
         rpc.close();
-        ws.close();
-      }
+        transport.close();
+      }),
     }),
     notify: command({
       name: 'notify',
@@ -54,7 +55,7 @@ const cli = subcommands({
           long: 'url',
           description: 'The URL to connect to',
           type: string,
-          defaultValue: () => 'http://localhost:3000/ws',
+          defaultValue: () => 'ws://localhost:3000/ws',
           defaultValueIsSerializable: true,
         }),
         eventName: positional({
@@ -65,28 +66,53 @@ const cli = subcommands({
           type: optional(string),
         }),
       },
-      handler: async args => {
+      handler: handled(async args => {
         // Extract arguments
         const url = args.url;
         const eventName = args.eventName;
         const arg = args.arg ? parse(args.arg) : args.arg;
 
         // Initialize RPC
-
-        const ws = new WebSocketTransport(url);
-        await ws.open();
+        const transport = await loadTransport(url);
+        await transport.open();
         const local = emptyContract(); // Remote is not allowed to call any methods
         const remote = anyContract(); // We are allowed to dynamically call anthing we wish
-        const rpc = connect(implement(local, remote).finish(), ws, {});
+        const rpc = connect(implement(local, remote).finish(), transport, {});
 
         await rpc.notify(eventName, arg);
 
         rpc.close();
-        ws.close();
-      },
+        transport.close();
+      }),
     }),
   }
 });
+
+type Promisify<T extends (...args: any) => any> = (...args: Parameters<T>) => Promise<Awaited<ReturnType<T>>>;
+
+function handled<Fn extends (...args: any[]) => any>(proc: Fn): Promisify<Fn> {
+  return (async (...args) => {
+    try {
+      return await proc(...args);
+    } catch (error) {
+      if (error instanceof TransportError) {
+        console.error(`Error: ${error.message}`);
+        process.exit(1);
+      }
+      throw error;
+    }
+  }) as Fn;
+}
+
+async function loadTransport(url: string) {
+  const protocol = new URL(url).protocol;
+  switch (protocol) {
+    case 'ws:':
+      return new WebSocketTransport(url);
+    default:
+      throw new Error(`Unrecognised protocol '${protocol}'`);
+  }
+}
 
 await run(cli, process.argv.slice(2));
 
